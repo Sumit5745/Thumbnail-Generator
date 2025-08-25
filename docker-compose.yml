@@ -1,0 +1,192 @@
+# Docker Compose file for Thumbnail Generator
+# Only MongoDB and Redis run in Docker, other services run locally
+# This setup provides database isolation while allowing local development
+
+services:
+  # MongoDB Database
+  mongodb:
+    image: mongo:7.0
+    container_name: thumbnail-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+      - ./docker/mongodb/init-mongo.js:/docker-entrypoint-initdb.d/init-mongo.js:ro
+    networks:
+      - thumbnail-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Redis Cache and Queue
+  redis:
+    image: redis:7.2-alpine
+    container_name: thumbnail-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis123}
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - thumbnail-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Backend API Server (Commented out - run locally instead)
+  # api-server:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #     target: development
+  #   container_name: thumbnail-api
+  #   restart: unless-stopped
+  #   environment:
+  #     NODE_ENV: development
+  #     PORT: 3000
+  #     MONGODB_URI: mongodb://mongodb:27017/thumbnail-generator
+  #     REDIS_URL: redis://:${REDIS_PASSWORD:-redis123}@redis:6379
+  #     JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-key-change-in-production-please}
+  #     API_BASE_URL: http://localhost:3000
+  #     CORS_ORIGINS: http://localhost:3001,http://frontend:3001,http://127.0.0.1:3001
+  #     MAX_FILE_SIZE: 104857600
+  #     REQUEST_TIMEOUT: 300000
+  #     CONNECTION_TIMEOUT: 300000
+  #     UPLOAD_TIMEOUT: 300000
+  #     FFMPEG_PATH: ffmpeg
+  #     FFPROBE_PATH: ffprobe
+  #   ports:
+  #     - "3000:3000"
+  #   volumes:
+  #     - .:/app
+  #     - /app/node_modules
+  #     - uploads_data:/app/uploads
+  #   depends_on:
+  #     mongodb:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+  #   networks:
+  #     - thumbnail-network
+  #   command: ["dumb-init", "--", "npm", "run", "dev:server"]
+  #   healthcheck:
+  #     test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #     start_period: 40s
+
+  # Worker Process (Commented out - run locally instead)
+  # worker:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #     target: development
+  #   container_name: thumbnail-worker
+  #   restart: unless-stopped
+  #   environment:
+  #     NODE_ENV: development
+  #     MONGODB_URI: mongodb://mongodb:27017/thumbnail-generator
+  #     REDIS_URL: redis://:${REDIS_PASSWORD:-redis123}@redis:6379
+  #     FFMPEG_PATH: ffmpeg
+  #     FFPROBE_PATH: ffprobe
+  #     MAX_FILE_SIZE: 104857600
+  #   volumes:
+  #     - .:/app
+  #     - /app/node_modules
+  #     - uploads_data:/app/uploads
+  #   depends_on:
+  #     mongodb:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+  #   networks:
+  #     - thumbnail-network
+  #   command: ["dumb-init", "--", "npm", "run", "dev:worker"]
+
+  # Frontend Next.js Application (Commented out - run locally instead)
+  # frontend:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #     target: development
+  #   container_name: thumbnail-frontend
+  #   restart: unless-stopped
+  #   environment:
+  #     NODE_ENV: development
+  #     PORT: 3001
+  #     NEXT_PUBLIC_API_URL: http://localhost:3000
+  #     NEXT_PUBLIC_SOCKET_URL: http://localhost:3000
+  #     NEXT_PUBLIC_API_TIMEOUT: 30000
+  #     NEXT_PUBLIC_UPLOAD_TIMEOUT: 300000
+  #   ports:
+  #     - "3001:3001"
+  #   volumes:
+  #     - .:/app
+  #     - /app/node_modules
+  #     - /app/.next
+  #   depends_on:
+  #     api-server:
+  #       condition: service_healthy
+  #   networks:
+  #     - thumbnail-network
+  #   command: ["dumb-init", "--", "npm", "run", "dev:frontend"]
+  #   healthcheck:
+  #     test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #     start_period: 60s
+
+  # Redis Commander (Optional - for Redis management)
+  # redis-commander:
+  #   image: rediscommander/redis-commander:latest
+  #   container_name: thumbnail-redis-commander
+  #   restart: unless-stopped
+  #   environment:
+  #     REDIS_HOSTS: local:redis:6379:0:${REDIS_PASSWORD:-redis123}
+  #   ports:
+  #     - "8081:8081"
+  #   depends_on:
+  #     - redis
+  #   networks:
+  #     - thumbnail-network
+  #   profiles:
+  #     - tools
+
+  # Mongo Express (Optional - for MongoDB management)
+  # mongo-express:
+  #   image: mongo-express:1.0.0
+  #   container_name: thumbnail-mongo-express
+  #   restart: unless-stopped
+  #   environment:
+  #     ME_CONFIG_MONGODB_URL: mongodb://mongodb:27017/
+  #     ME_CONFIG_BASICAUTH_USERNAME: ${MONGO_EXPRESS_USER:-admin}
+  #     ME_CONFIG_BASICAUTH_PASSWORD: ${MONGO_EXPRESS_PASSWORD:-admin123}
+  #   ports:
+  #     - "8082:8081"
+  #   depends_on:
+  #     - mongodb
+  #   networks:
+  #     - thumbnail-network
+  #   profiles:
+  #     - tools
+
+volumes:
+  mongodb_data:
+    driver: local
+  redis_data:
+    driver: local
+  uploads_data:
+    driver: local
+
+networks:
+  thumbnail-network:
+    driver: bridge

@@ -1,0 +1,30 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "target": "ES2020",
+    "outDir": "./dist",
+    "rootDir": "./",
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": false,
+    "noEmit": false
+  },
+  "include": [
+    "server/**/*",
+    "src/worker/**/*",
+    "src/types/**/*"
+  ],
+  "exclude": [
+    "src/app/**/*",
+    "src/components/**/*",
+    "src/store/**/*",
+    "node_modules",
+    "dist",
+    ".next"
+  ]
+}
