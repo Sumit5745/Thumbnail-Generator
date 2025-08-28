@@ -42,6 +42,8 @@
         "@types/jsonwebtoken": "^9.0.10",
         "@types/multer": "^2.0.0",
         "@types/uuid": "^10.0.0",
+        "autoprefixer": "^10.4.21",
+        "axios": "^1.11.0",
         "bcryptjs": "^3.0.2",
         "bullmq": "^5.58.1",
         "class-variance-authority": "^0.7.1",
@@ -58,6 +60,7 @@
         "next-themes": "^0.4.6",
         "nodemon": "^3.1.10",
         "pino-pretty": "^13.1.1",
+        "postcss": "^8.5.6",
         "react": "19.1.0",
         "react-dom": "19.1.0",
         "react-dropzone": "^14.3.8",
@@ -67,20 +70,19 @@
         "socket.io-client": "^4.8.1",
         "sonner": "^2.0.7",
         "tailwind-merge": "^3.3.1",
+        "tailwindcss": "^3.4.0",
         "tsx": "^4.20.4",
         "uuid": "^11.1.0",
         "zod": "^4.1.0"
     },
     "devDependencies": {
         "@eslint/eslintrc": "^3",
-        "@tailwindcss/postcss": "^4",
         "@types/node": "^20.19.11",
         "@types/react": "^19",
         "@types/react-dom": "^19",
         "@types/sharp": "^0.31.1",
         "eslint": "^9",
         "eslint-config-next": "15.5.0",
-        "tailwindcss": "^4",
         "typescript": "^5"
     }
 }

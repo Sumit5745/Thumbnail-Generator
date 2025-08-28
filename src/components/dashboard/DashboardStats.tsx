@@ -1,106 +1,80 @@
 'use client';
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { 
-  CheckCircle, 
-  Clock, 
-  Loader2, 
-  XCircle, 
-  FileText,
-  TrendingUp
-} from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
+import { BarChart3, CheckCircle, Clock, AlertCircle, TrendingUp } from 'lucide-react';
 
 interface DashboardStatsProps {
-  stats: {
+  stats?: {
     total: number;
-    pending: number;
-    queued: number;
-    processing: number;
     completed: number;
+    processing: number;
     failed: number;
   };
 }
 
 export function DashboardStats({ stats }: DashboardStatsProps) {
-  const statCards = [
-    {
-      title: 'Total Jobs',
-      value: stats.total,
-      icon: FileText,
-      color: 'text-blue-600',
-      bgColor: 'bg-blue-100'
-    },
-    {
-      title: 'Completed',
-      value: stats.completed,
-      icon: CheckCircle,
-      color: 'text-green-600',
-      bgColor: 'bg-green-100'
-    },
-    {
-      title: 'Processing',
-      value: stats.processing,
-      icon: Loader2,
-      color: 'text-blue-600',
-      bgColor: 'bg-blue-100',
-      animate: stats.processing > 0
-    },
-    {
-      title: 'Queued',
-      value: stats.queued,
-      icon: Clock,
-      color: 'text-yellow-600',
-      bgColor: 'bg-yellow-100'
-    },
-    {
-      title: 'Failed',
-      value: stats.failed,
-      icon: XCircle,
-      color: 'text-red-600',
-      bgColor: 'bg-red-100'
-    }
-  ];
+  // Default values if stats is undefined
+  const defaultStats = {
+    total: 0,
+    completed: 0,
+    processing: 0,
+    failed: 0
+  };
 
-  const successRate = stats.total > 0 
-    ? Math.round((stats.completed / stats.total) * 100) 
-    : 0;
+  const currentStats = stats || defaultStats;
+
+  const getCompletionRate = () => {
+    if (currentStats.total === 0) return 0;
+    return Math.round((currentStats.completed / currentStats.total) * 100);
+  };
+
+  const getSuccessRate = () => {
+    if (currentStats.total === 0) return 0;
+    return Math.round((currentStats.completed / (currentStats.completed + currentStats.failed)) * 100);
+  };
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-6">
-      {statCards.map((stat, index) => {
-        const Icon = stat.icon;
-        return (
-          <Card key={index}>
-            <CardContent className="p-6">
-              <div className="flex items-center">
-                <div className={`p-2 rounded-full ${stat.bgColor}`}>
-                  <Icon 
-                    className={`h-4 w-4 ${stat.color} ${stat.animate ? 'animate-spin' : ''}`} 
-                  />
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">{stat.title}</p>
-                  <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        );
-      })}
-      
-      {/* Success Rate Card */}
-      <Card>
-        <CardContent className="p-6">
-          <div className="flex items-center">
-            <div className="p-2 rounded-full bg-purple-100">
-              <TrendingUp className="h-4 w-4 text-purple-600" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Success Rate</p>
-              <p className="text-2xl font-bold text-gray-900">{successRate}%</p>
-            </div>
-          </div>
-        </CardContent>
+    <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      {/* Total Files */}
+      <Card className="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-6 hover:-translate-y-2 transition-all duration-500 hover:bg-white/15">
+        <div className="flex items-center justify-center w-14 h-14 bg-gradient-to-br from-blue-500/20 to-blue-600/20 rounded-2xl mx-auto mb-4 shadow-lg border border-blue-500/30">
+          <BarChart3 className="h-7 w-7 text-blue-400" />
+        </div>
+        <h3 className="text-3xl font-bold text-white mb-2 text-center">{currentStats.total}</h3>
+        <p className="text-slate-300 font-medium text-center">Total Files Processed</p>
+      </Card>
+
+      {/* Completed Files */}
+      <Card className="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-6 hover:-translate-y-2 transition-all duration-500 hover:bg-white/15">
+        <div className="flex items-center justify-center w-14 h-14 bg-gradient-to-br from-green-500/20 to-green-600/20 rounded-2xl mx-auto mb-4 shadow-lg border border-green-500/30">
+          <CheckCircle className="h-7 w-7 text-green-400" />
+        </div>
+        <h3 className="text-3xl font-bold text-white mb-2 text-center">{currentStats.completed}</h3>
+        <p className="text-slate-300 font-medium text-center">Successfully Completed</p>
+        <p className="text-xs text-green-400 mt-1 text-center">
+          {getCompletionRate()}% completion rate
+        </p>
+      </Card>
+
+      {/* Processing Files */}
+      <Card className="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-6 hover:-translate-y-2 transition-all duration-500 hover:bg-white/15">
+        <div className="flex items-center justify-center w-14 h-14 bg-gradient-to-br from-orange-500/20 to-orange-600/20 rounded-2xl mx-auto mb-4 shadow-lg border border-orange-500/30">
+          <Clock className="h-7 w-7 text-orange-400" />
+        </div>
+        <h3 className="text-3xl font-bold text-white mb-2 text-center">{currentStats.processing}</h3>
+        <p className="text-slate-300 font-medium text-center">Currently Processing</p>
+      </Card>
+
+      {/* Failed Files */}
+      <Card className="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-6 hover:-translate-y-2 transition-all duration-500 hover:bg-white/15">
+        <div className="flex items-center justify-center w-14 h-14 bg-gradient-to-br from-red-500/20 to-red-600/20 rounded-2xl mx-auto mb-4 shadow-lg border border-red-500/30">
+          <AlertCircle className="h-7 w-7 text-red-400" />
+        </div>
+        <h3 className="text-3xl font-bold text-white mb-2 text-center">{currentStats.failed}</h3>
+        <p className="text-slate-300 font-medium text-center">Failed Jobs</p>
+        <p className="text-xs text-red-400 mt-1 text-center">
+          {getSuccessRate()}% success rate
+        </p>
       </Card>
     </div>
   );

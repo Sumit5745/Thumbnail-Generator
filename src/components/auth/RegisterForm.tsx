@@ -5,16 +5,16 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2, Eye, EyeOff, User, Mail, Lock, UserPlus, Shield, Sparkles, Crown, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
+import { User, Lock, Eye, EyeOff, Mail, ArrowRight, Sparkles, Shield } from 'lucide-react';
+import { Loader } from '@/components/ui/loader';
 
 interface RegisterFormProps {
   onSuccess: (user: any, token: string) => void;
   onSwitchToLogin: () => void;
 }
 
-// Password validation function to match backend requirements
 const validatePassword = (password: string): string[] => {
   const errors: string[] = [];
 
@@ -22,19 +22,19 @@ const validatePassword = (password: string): string[] => {
     errors.push('Password must be at least 8 characters long');
   }
 
-  if (!/[a-z]/.test(password)) {
-    errors.push('Password must contain at least one lowercase letter');
-  }
-
   if (!/[A-Z]/.test(password)) {
     errors.push('Password must contain at least one uppercase letter');
+  }
+
+  if (!/[a-z]/.test(password)) {
+    errors.push('Password must contain at least one lowercase letter');
   }
 
   if (!/\d/.test(password)) {
     errors.push('Password must contain at least one number');
   }
 
-  if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
+  if (!/[!@#$%^&*(),.?":{}|<>]/.test(password)) {
     errors.push('Password must contain at least one special character');
   }
 
@@ -45,6 +45,7 @@ export function RegisterForm({ onSuccess, onSwitchToLogin }: RegisterFormProps) 
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [passwordErrors, setPasswordErrors] = useState<string[]>([]);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -52,27 +53,56 @@ export function RegisterForm({ onSuccess, onSwitchToLogin }: RegisterFormProps) 
     confirmPassword: ''
   });
 
+  const validatePasswordRealTime = (password: string) => {
+    const errors = validatePassword(password);
+    setPasswordErrors(errors);
+    return errors.length === 0;
+  };
+
+  const handleInputChange = (field: keyof typeof formData) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setFormData(prev => ({ ...prev, [field]: value }));
+
+    if (field === 'password') {
+      validatePasswordRealTime(value);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
+    if (!formData.name.trim()) {
+      toast.error('Please enter your full name');
+      return;
+    }
+
+    if (!formData.email.trim()) {
+      toast.error('Please enter your email address');
+      return;
+    }
+
+    if (!formData.password) {
+      toast.error('Please enter a password');
+      return;
+    }
+
     if (formData.password !== formData.confirmPassword) {
       toast.error('Passwords do not match');
       return;
     }
 
-    // Validate password strength
     const passwordErrors = validatePassword(formData.password);
     if (passwordErrors.length > 0) {
-      toast.error(passwordErrors[0]); // Show first error
+      toast.error(passwordErrors[0]);
       return;
     }
 
     setIsLoading(true);
-    
+
     try {
       const response = await api.auth.register({
-        name: formData.name,
-        email: formData.email,
+        name: formData.name.trim(),
+        email: formData.email.trim().toLowerCase(),
         password: formData.password
       });
 
@@ -80,20 +110,31 @@ export function RegisterForm({ onSuccess, onSwitchToLogin }: RegisterFormProps) 
         toast.success('Account created successfully!');
         onSuccess(response.data.user, response.data.token);
       } else {
-        throw new Error(response.error || 'Registration failed');
+        let errorMessage = 'Registration failed';
+        if (typeof response.error === 'string') {
+          errorMessage = response.error;
+        } else if (response.error && typeof response.error === 'object') {
+          errorMessage = (response.error as any).message || 'Registration failed';
+        }
+        throw new Error(errorMessage);
       }
     } catch (error: any) {
-      console.error('Registration error:', error);
-
-      // Handle different error types
       let errorMessage = 'Registration failed';
 
-      if (error?.response?.data?.error) {
+      if (error?.response?.data?.error?.message) {
+        errorMessage = error.response.data.error.message;
+      } else if (error?.response?.data?.error) {
         errorMessage = error.response.data.error;
+      } else if (error?.data?.error?.message) {
+        errorMessage = error.data.error.message;
+      } else if (error?.data?.error) {
+        errorMessage = error.data.error;
       } else if (error?.message) {
         errorMessage = error.message;
       } else if (typeof error === 'string') {
         errorMessage = error;
+      } else if (error?.error?.message) {
+        errorMessage = error.error.message;
       } else if (error?.error) {
         errorMessage = error.error;
       }
@@ -104,219 +145,180 @@ export function RegisterForm({ onSuccess, onSwitchToLogin }: RegisterFormProps) 
     }
   };
 
-  const handleInputChange = (field: keyof typeof formData) => (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData(prev => ({ ...prev, [field]: e.target.value }));
-  };
-
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 p-4 relative overflow-hidden">
-      {/* Enhanced Background Pattern */}
-      <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-gradient-to-br from-blue-400/20 to-purple-600/20 rounded-full blur-3xl animate-float"></div>
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-gradient-to-br from-green-400/20 to-blue-600/20 rounded-full blur-3xl animate-float" style={{ animationDelay: '2s' }}></div>
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-gradient-to-br from-indigo-400/10 to-purple-600/10 rounded-full blur-3xl animate-float" style={{ animationDelay: '4s' }}></div>
-      </div>
-      
-      <div className="w-full max-w-md relative z-10">
-        {/* Professional Header */}
-        <div className="text-center mb-8">
-          <div className="relative mb-6">
-            <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-blue-600 via-purple-600 to-indigo-700 rounded-3xl shadow-2xl shadow-blue-500/25 transform hover:scale-105 transition-all duration-300 animate-glow">
-              <Crown className="w-10 h-10 text-white" />
-            </div>
-            <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-blue-600 via-purple-600 to-indigo-700 opacity-20 animate-ping"></div>
-          </div>
-          <h1 className="text-4xl font-bold gradient-text mb-3">
-            Join Pro Platform
-          </h1>
-          <p className="text-slate-600 text-lg mb-2">
-            Create your professional account today
-          </p>
-          <p className="text-slate-500 text-sm">
-            Access advanced thumbnail generation tools
-          </p>
-        </div>
-
-        {/* Professional Features Preview */}
-        <div className="mb-8 grid grid-cols-3 gap-4">
-          <div className="text-center p-3 rounded-xl bg-white/50 backdrop-blur-sm border border-white/30">
-            <Sparkles className="h-6 w-6 text-purple-600 mx-auto mb-2" />
-            <p className="text-xs font-medium text-slate-700">AI Powered</p>
-          </div>
-          <div className="text-center p-3 rounded-xl bg-white/50 backdrop-blur-sm border border-white/30">
-            <Shield className="h-6 w-6 text-green-600 mx-auto mb-2" />
-            <p className="text-xs font-medium text-slate-700">Secure</p>
-          </div>
-          <div className="text-center p-3 rounded-xl bg-white/50 backdrop-blur-sm border border-white/30">
-            <CheckCircle className="h-6 w-6 text-blue-600 mx-auto mb-2" />
-            <p className="text-xs font-medium text-slate-700">Professional</p>
+    <Card className="bg-white/10 backdrop-blur-md border border-white/20 w-full max-w-md mx-auto shadow-2xl">
+      <CardHeader className="text-center pb-6">
+        <div className="mb-4">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-purple-600 to-indigo-600 rounded-2xl shadow-lg">
+            <Shield className="h-8 w-8 text-white" />
           </div>
         </div>
-      
-        {/* Professional Registration Card */}
-        <Card className="card-professional">
-          <CardHeader className="space-y-1 text-center">
-            <div className="flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl mx-auto mb-4 shadow-lg">
-              <UserPlus className="h-8 w-8 text-white" />
+        <CardTitle className="text-3xl font-bold text-white">
+          Create Account
+        </CardTitle>
+        <CardDescription className="text-slate-300 text-lg">
+          Join us and start creating amazing thumbnails
+        </CardDescription>
+      </CardHeader>
+
+      <CardContent className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Name Field */}
+          <div className="space-y-2">
+            <Label htmlFor="name" className="text-sm font-medium text-slate-300">
+              Full Name
+            </Label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <User className="h-4 w-4 text-slate-400" />
+              </div>
+              <Input
+                id="name"
+                type="text"
+                placeholder="Enter your full name"
+                value={formData.name}
+                onChange={handleInputChange('name')}
+                className="pl-10 bg-white/10 border-white/20 text-white placeholder:text-slate-400 focus:border-white/40"
+                disabled={isLoading}
+              />
             </div>
-            <CardTitle className="text-3xl font-bold gradient-text">
-              Create Account
-            </CardTitle>
-            <CardDescription className="text-slate-600">
-              Join Thumbnail Generator Pro today
-            </CardDescription>
-          </CardHeader>
-          
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="name" className="text-slate-700 font-medium flex items-center gap-2">
-                  <User className="h-4 w-4 text-blue-600" />
-                  Full Name
-                </Label>
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
-                  <Input
-                    id="name"
-                    type="text"
-                    placeholder="Enter your full name"
-                    value={formData.name}
-                    onChange={handleInputChange('name')}
-                    className="pl-10 border-slate-200 focus:border-blue-500 focus:ring-blue-500 bg-white/50"
-                    required
-                    disabled={isLoading}
-                  />
-                </div>
-              </div>
+          </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="email" className="text-slate-700 font-medium flex items-center gap-2">
-                  <Mail className="h-4 w-4 text-blue-600" />
-                  Email Address
-                </Label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="Enter your professional email"
-                    value={formData.email}
-                    onChange={handleInputChange('email')}
-                    className="pl-10 border-slate-200 focus:border-blue-500 focus:ring-blue-500 bg-white/50"
-                    required
-                    disabled={isLoading}
-                  />
-                </div>
+          {/* Email Field */}
+          <div className="space-y-2">
+            <Label htmlFor="email" className="text-sm font-medium text-slate-300">
+              Email Address
+            </Label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Mail className="h-4 w-4 text-slate-400" />
               </div>
+              <Input
+                id="email"
+                type="email"
+                placeholder="Enter your email"
+                value={formData.email}
+                onChange={handleInputChange('email')}
+                className="pl-10 bg-white/10 border-white/20 text-white placeholder:text-slate-400 focus:border-white/40"
+                disabled={isLoading}
+              />
+            </div>
+          </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="password" className="text-slate-700 font-medium flex items-center gap-2">
-                  <Lock className="h-4 w-4 text-blue-600" />
-                  Password
-                </Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
-                  <Input
-                    id="password"
-                    type={showPassword ? 'text' : 'password'}
-                    placeholder="Create a secure password"
-                    value={formData.password}
-                    onChange={handleInputChange('password')}
-                    className="pl-10 pr-10 border-slate-200 focus:border-blue-500 focus:ring-blue-500 bg-white/50"
-                    required
-                    disabled={isLoading}
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
-                    onClick={() => setShowPassword(!showPassword)}
-                    disabled={isLoading}
-                  >
-                    {showPassword ? (
-                      <EyeOff className="h-4 w-4 text-slate-400" />
-                    ) : (
-                      <Eye className="h-4 w-4 text-slate-400" />
-                    )}
-                  </Button>
-                </div>
+          {/* Password Field */}
+          <div className="space-y-2">
+            <Label htmlFor="password" className="text-sm font-medium text-slate-300">
+              Password
+            </Label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Lock className="h-4 w-4 text-slate-400" />
               </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="confirmPassword" className="text-slate-700 font-medium flex items-center gap-2">
-                  <Shield className="h-4 w-4 text-blue-600" />
-                  Confirm Password
-                </Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
-                  <Input
-                    id="confirmPassword"
-                    type={showConfirmPassword ? 'text' : 'password'}
-                    placeholder="Confirm your password"
-                    value={formData.confirmPassword}
-                    onChange={handleInputChange('confirmPassword')}
-                    className="pl-10 pr-10 border-slate-200 focus:border-blue-500 focus:ring-blue-500 bg-white/50"
-                    required
-                    disabled={isLoading}
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    disabled={isLoading}
-                  >
-                    {showConfirmPassword ? (
-                      <EyeOff className="h-4 w-4 text-slate-400" />
-                    ) : (
-                      <Eye className="h-4 w-4 text-slate-400" />
-                    )}
-                  </Button>
-                </div>
-              </div>
-
-              <Button
-                type="submit"
-                className="w-full btn-primary"
+              <Input
+                id="password"
+                type={showPassword ? 'text' : 'password'}
+                placeholder="Create a strong password"
+                value={formData.password}
+                onChange={handleInputChange('password')}
+                className="pl-10 pr-10 bg-white/10 border-white/20 text-white placeholder:text-slate-400 focus:border-white/40"
+                disabled={isLoading}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-300"
                 disabled={isLoading}
               >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Creating Professional Account...
-                  </>
-                ) : (
-                  <>
-                    <UserPlus className="mr-2 h-4 w-4" />
-                    Create Professional Account
-                  </>
-                )}
-              </Button>
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
 
-              <div className="text-center">
-                <Button
-                  type="button"
-                  variant="link"
-                  onClick={onSwitchToLogin}
-                  className="text-slate-600 hover:text-blue-600"
-                  disabled={isLoading}
-                >
-                  Already have an account? Sign in
-                </Button>
+          {/* Confirm Password Field */}
+          <div className="space-y-2">
+            <Label htmlFor="confirmPassword" className="text-sm font-medium text-slate-300">
+              Confirm Password
+            </Label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Lock className="h-4 w-4 text-slate-400" />
               </div>
-            </form>
-          </CardContent>
-        </Card>
+              <Input
+                id="confirmPassword"
+                type={showConfirmPassword ? 'text' : 'password'}
+                placeholder="Confirm your password"
+                value={formData.confirmPassword}
+                onChange={handleInputChange('confirmPassword')}
+                className="pl-10 pr-10 bg-white/10 border-white/20 text-white placeholder:text-slate-400 focus:border-white/40"
+                disabled={isLoading}
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-300"
+                disabled={isLoading}
+              >
+                {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
 
-        {/* Professional Footer */}
-        <div className="text-center mt-8">
-          <p className="text-xs text-slate-500">
-            © 2024 Thumbnail Generator Pro. Professional image processing platform.
+          {/* Password Requirements */}
+          {formData.password && (
+            <div className="space-y-2">
+              <Label className="text-sm font-medium text-slate-300">Password Requirements</Label>
+              <div className="grid grid-cols-1 gap-1 text-xs">
+                {[
+                  { condition: formData.password.length >= 8, text: 'At least 8 characters' },
+                  { condition: /[A-Z]/.test(formData.password), text: 'One uppercase letter' },
+                  { condition: /[a-z]/.test(formData.password), text: 'One lowercase letter' },
+                  { condition: /\d/.test(formData.password), text: 'One number' },
+                  { condition: /[!@#$%^&*(),.?":{}|<>]/.test(formData.password), text: 'One special character' }
+                ].map((req, index) => (
+                  <div key={index} className="flex items-center gap-2">
+                    <div className={`w-1.5 h-1.5 rounded-full ${req.condition ? 'bg-green-500' : 'bg-slate-500'}`}></div>
+                    <span className={req.condition ? 'text-green-400' : 'text-slate-400'}>{req.text}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Submit Button */}
+          <Button
+            type="submit"
+            disabled={isLoading}
+            className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-semibold py-3 rounded-lg transition-all duration-300 shadow-lg hover:shadow-xl"
+          >
+            {isLoading ? (
+              <div className="flex items-center justify-center">
+                <Loader variant="dots" size="sm" className="mr-2" />
+                Creating account...
+              </div>
+            ) : (
+              <div className="flex items-center justify-center">
+                <span>Create Account</span>
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </div>
+            )}
+          </Button>
+        </form>
+
+        {/* Switch to Login */}
+        <div className="text-center">
+          <p className="text-slate-400 text-sm">
+            Already have an account?{' '}
+            <button
+              type="button"
+              onClick={onSwitchToLogin}
+              className="text-purple-400 hover:text-purple-300 font-medium transition-colors duration-200"
+              disabled={isLoading}
+            >
+              Sign in here
+            </button>
           </p>
         </div>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }

@@ -17,7 +17,16 @@ export function buildAssetUrl(relativePath: string): string {
   const cleanPath = relativePath.startsWith('/') ? relativePath : `/${relativePath}`;
   
   // Use the API base URL for serving static assets
-  return `${CONFIG.API_BASE_URL}${cleanPath}`;
+  const fullUrl = `${CONFIG.API_BASE_URL}${cleanPath}`;
+  
+  console.log('🔗 Building asset URL:', {
+    relativePath,
+    cleanPath,
+    baseUrl: CONFIG.API_BASE_URL,
+    fullUrl
+  });
+  
+  return fullUrl;
 }
 
 /**

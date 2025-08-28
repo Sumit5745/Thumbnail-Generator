@@ -131,9 +131,64 @@ async function buildServer() {
     sharedSchemaId: 'MultipartFileType'
   });
 
+  const fs = require('fs');
+  
+  // Try multiple possible paths for uploads directory (server moved to root)
+  const possiblePaths = [
+    path.join(process.cwd(), CONFIG.UPLOAD_DIR),
+    path.join(__dirname, '..', CONFIG.UPLOAD_DIR),
+    path.join(__dirname, CONFIG.UPLOAD_DIR),
+    CONFIG.UPLOAD_DIR
+  ];
+  
+  let uploadsPath = null;
+  for (const testPath of possiblePaths) {
+    if (fs.existsSync(testPath)) {
+      uploadsPath = testPath;
+      break;
+    }
+  }
+  
+  if (!uploadsPath) {
+    // Create uploads directory if it doesn't exist
+    uploadsPath = path.join(process.cwd(), CONFIG.UPLOAD_DIR);
+    fs.mkdirSync(uploadsPath, { recursive: true });
+    fs.mkdirSync(path.join(uploadsPath, 'thumbnails'), { recursive: true });
+  }
+  
+  logger.info('Static file serving configuration:', {
+    uploadsPath,
+    prefix: '/uploads/',
+    exists: fs.existsSync(uploadsPath),
+    cwd: process.cwd(),
+    dirname: __dirname,
+    uploadsDir: CONFIG.UPLOAD_DIR,
+    possiblePaths
+  });
+
+  // Check if thumbnails directory exists
+  const thumbnailsPath = path.join(uploadsPath, 'thumbnails');
+  if (!fs.existsSync(thumbnailsPath)) {
+    fs.mkdirSync(thumbnailsPath, { recursive: true });
+  }
+  
+  logger.info('Thumbnails directory check:', {
+    thumbnailsPath,
+    exists: fs.existsSync(thumbnailsPath),
+    files: fs.existsSync(thumbnailsPath) ? fs.readdirSync(thumbnailsPath).slice(0, 5) : []
+  });
+
   await fastify.register(staticFiles, {
-    root: path.join(__dirname, `../../${CONFIG.UPLOAD_DIR}`),
-    prefix: '/uploads/'
+    root: uploadsPath,
+    prefix: '/uploads/',
+    decorateReply: false,
+    setHeaders: (res, path) => {
+      // Add CORS headers for images
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Methods', 'GET');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+      res.setHeader('Cache-Control', 'public, max-age=31536000');
+    }
   });
 
   await connectDB();
@@ -160,6 +215,22 @@ async function buildServer() {
     return { status: 'OK', timestamp: new Date().toISOString() };
   });
 
+  // Test static file serving
+  fastify.get('/api/test-static', async () => {
+    const fs = require('fs');
+    const thumbnailsPath = path.join(uploadsPath, 'thumbnails');
+    const files = fs.existsSync(thumbnailsPath) ? fs.readdirSync(thumbnailsPath) : [];
+    
+    return { 
+      status: 'OK', 
+      uploadsPath,
+      thumbnailsPath,
+      filesCount: files.length,
+      sampleFiles: files.slice(0, 3),
+      testUrl: `${CONFIG.API_BASE_URL}/uploads/thumbnails/${files[0] || 'test'}`
+    };
+  });
+
   return fastify;
 }
 
@@ -173,7 +244,7 @@ async function start() {
     // Start Fastify server
     await fastify.listen({ 
       port: CONFIG.PORT, 
-      host: '0.0.0.0'  // Use 0.0.0.0 to bind to all interfaces and avoid IPv6 conflicts
+      host: '0.0.0.0'  
     });
     logger.info(`Server running on http://localhost:${CONFIG.PORT}`, {
       port: CONFIG.PORT,

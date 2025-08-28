@@ -3,7 +3,7 @@ import { spawn } from 'child_process';
 import path from 'path';
 import { mkdir, access } from 'fs/promises';
 import { v4 as uuidv4 } from 'uuid';
-import { Job, Thumbnail } from '../../server/models';
+import { Job, Thumbnail, File } from '../../server/models';
 import { ThumbnailJobData } from '../types';
 import { CONFIG } from '../../server/config/config';
 
@@ -12,6 +12,12 @@ export async function processThumbnailJob(
   updateProgress: (progress: number) => Promise<void>
 ): Promise<{ thumbnails: string[] }> {
   const { jobId, fileId, userId, filePath, fileType, outputDir } = jobData;
+
+  // Add timeout to prevent hanging
+  const timeout = setTimeout(() => {
+    console.error(`❌ Job ${jobId} timed out after 5 minutes`);
+    throw new Error('Job processing timed out');
+  }, 5 * 60 * 1000); // 5 minutes timeout
 
   try {
     // Update progress
@@ -57,18 +63,28 @@ export async function processThumbnailJob(
 
     await thumbnail.save();
 
-    // Update job with thumbnail reference
-    await Job.findByIdAndUpdate(jobId, {
-      status: 'completed',
-      progress: 100,
-      completedAt: new Date(),
-      $push: { thumbnails: thumbnail._id }
-    });
+    // Update job with thumbnail reference - with better error handling
+    try {
+      await Job.findByIdAndUpdate(jobId, {
+        status: 'completed',
+        progress: 100,
+        completedAt: new Date(),
+        $push: { thumbnails: thumbnail._id }
+      }, { new: true });
 
-    await updateProgress(100);
+      console.log(`✅ Job ${jobId} status updated to completed`);
 
-    console.log(`✅ Thumbnail generated successfully: ${thumbnailPath}`);
-    return { thumbnails: [thumbnailUrl] };
+      // The queue event listener will handle Redis publishing
+      console.log(`✅ Job ${jobId} completed successfully`);
+
+      await updateProgress(100);
+
+      console.log(`✅ Thumbnail generated successfully: ${thumbnailPath}`);
+      return { thumbnails: [thumbnailUrl] };
+    } catch (dbError : unknown) {
+      console.error(`❌ Database update failed for job ${jobId}:`, dbError);
+      throw new Error(`Failed to update job status: ${dbError || 'Unknown error'}`);
+    }
 
   } catch (error) {
     console.error(`❌ Error processing thumbnail job ${jobId}:`, error);
@@ -81,6 +97,8 @@ export async function processThumbnailJob(
     });
 
     throw error;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -157,6 +175,35 @@ async function processImageThumbnail(
 }
 
 async function processVideoThumbnail(
+  inputPath: string,
+  outputDir: string,
+  updateProgress: (progress: number) => Promise<void>
+): Promise<string> {
+  // Check if FFmpeg is available
+  const { spawn } = require('child_process');
+  const ffmpegCheck = spawn('ffmpeg', ['-version']);
+  
+  return new Promise((resolve, reject) => {
+    ffmpegCheck.on('error', (error: any) => {
+      console.error('❌ FFmpeg not found:', error.message);
+      reject(new Error('FFmpeg is not installed or not in PATH. Please install FFmpeg.'));
+    });
+    
+    ffmpegCheck.on('close', (code: number) => {
+      if (code !== 0) {
+        reject(new Error('FFmpeg check failed. Please install FFmpeg.'));
+        return;
+      }
+      
+      // Continue with video processing
+      processVideoThumbnailInternal(inputPath, outputDir, updateProgress)
+        .then(resolve)
+        .catch(reject);
+    });
+  });
+}
+
+async function processVideoThumbnailInternal(
   inputPath: string,
   outputDir: string,
   updateProgress: (progress: number) => Promise<void>

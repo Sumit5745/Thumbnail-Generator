@@ -10,11 +10,16 @@ export function setupSocketIO(server: any): SocketIOServer {
   const allowedOrigins = [
     CONFIG.FRONTEND_URL,
     CONFIG.API_BASE_URL,
+    'http://localhost:3000',
+    'http://localhost:3001',
+    'http://127.0.0.1:3000',
+    'http://127.0.0.1:3001',
     // Development fallbacks
     ...(CONFIG.isDevelopment ? [
-        CONFIG.API_BASE_URL,
-  CONFIG.FRONTEND_URL,
-      `http://localhost:${CONFIG.PORT}`
+      'http://localhost:3000',
+      'http://localhost:3001',
+      'http://127.0.0.1:3000',
+      'http://127.0.0.1:3001'
     ] : [])
   ].filter((origin, index, arr) => arr.indexOf(origin) === index); // Remove duplicates
 

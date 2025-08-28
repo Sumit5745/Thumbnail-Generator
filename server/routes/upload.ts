@@ -128,6 +128,7 @@ export async function uploadRoutes(fastify: FastifyInstance) {
           jobId: job._id.toString(),
           fileId: fileDoc._id.toString(),
           filename: fileDoc.originalName,
+          fileSize: fileDoc.size,
           status: job.status
         }]
       };
@@ -274,6 +275,7 @@ export async function uploadRoutes(fastify: FastifyInstance) {
           jobId: job._id.toString(),
           fileId: fileDoc._id.toString(),
           filename: fileDoc.originalName,
+          fileSize: fileDoc.size,
           status: job.status
         });
       }

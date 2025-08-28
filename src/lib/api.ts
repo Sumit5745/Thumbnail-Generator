@@ -17,12 +17,7 @@ const API_CONFIG = {
   UPLOAD_TIMEOUT: 300000,
 };
 
-console.log('🔧 API Configuration:', {
-  BASE_URL: API_CONFIG.BASE_URL,
-  SOCKET_URL: API_CONFIG.SOCKET_URL,
-  TIMEOUT: API_CONFIG.TIMEOUT,
-  UPLOAD_TIMEOUT: API_CONFIG.UPLOAD_TIMEOUT,
-});
+
 
 class ApiClient {
   private baseURL: string;
@@ -53,24 +48,11 @@ class ApiClient {
       signal: controller.signal,
     };
 
-    console.log(`🌐 API Request Details:`, {
-      method: options.method || 'GET',
-      endpoint,
-      fullUrl: url,
-      baseUrl: this.baseURL,
-      timeout: `${requestTimeout}ms`,
-      hasBody: !!options.body,
-      bodyType: options.body instanceof FormData ? 'FormData' : typeof options.body,
-    });
+
 
     try {
       const response = await fetch(url, config);
       clearTimeout(timeoutId);
-
-      console.log(`✅ API Response: ${response.status} ${response.statusText}`, {
-        url,
-        ok: response.ok,
-      });
 
       const contentType = response.headers.get('content-type');
       if (contentType && !contentType.includes('application/json')) {
@@ -79,7 +61,21 @@ class ApiClient {
 
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data.error || `HTTP ${response.status}`);
+        // Better error handling for authentication and other errors
+        let errorMessage = `HTTP ${response.status}`;
+        
+        if (data.error?.message) {
+          errorMessage = data.error.message;
+        } else if (data.error) {
+          errorMessage = typeof data.error === 'string' ? data.error : 'Request failed';
+        } else if (data.message) {
+          errorMessage = data.message;
+        }
+        
+        const error = new Error(errorMessage);
+        (error as any).status = response.status;
+        (error as any).data = data;
+        throw error;
       }
 
       return data;
@@ -134,15 +130,15 @@ class ApiClient {
 
   // Upload endpoints
   upload = {
-    single: async (file: File, onProgress?: (progress: number) => void): Promise<ApiResponse<UploadResponse>> => {
+    single: async (file: File, token?: string, onProgress?: (progress: number) => void): Promise<ApiResponse<UploadResponse>> => {
       const formData = new FormData();
       formData.append('file', file);
 
-      return this.uploadWithProgress('/api/upload/file', formData, onProgress);
+      return this.uploadWithProgress('/api/upload/file', formData, token, onProgress);
     },
 
-    multiple: async (files: FormData, onProgress?: (progress: number) => void): Promise<ApiResponse<UploadResponse>> => {
-      return this.uploadWithProgress('/api/upload/files/multiple', files, onProgress);
+    multiple: async (files: FormData, token?: string, onProgress?: (progress: number) => void): Promise<ApiResponse<UploadResponse>> => {
+      return this.uploadWithProgress('/api/upload/files/multiple', files, token, onProgress);
     },
   };
 
@@ -153,7 +149,7 @@ class ApiClient {
       if (token) {
         headers.Authorization = `Bearer ${token}`;
       }
-      return this.request<UserJobsResponse>('/api/thumbnails', { headers });
+      return this.request<UserJobsResponse>('/api/thumbnails/jobs', { headers });
     },
 
     getById: async (jobId: string, token?: string): Promise<ApiResponse<any>> => {
@@ -161,7 +157,7 @@ class ApiClient {
       if (token) {
         headers.Authorization = `Bearer ${token}`;
       }
-      return this.request(`/api/thumbnails/${jobId}`, { headers });
+      return this.request(`/api/thumbnails/jobs/${jobId}`, { headers });
     },
 
     delete: async (jobId: string, token?: string): Promise<ApiResponse> => {
@@ -169,10 +165,10 @@ class ApiClient {
       if (token) {
         headers.Authorization = `Bearer ${token}`;
       }
-      return this.request(`/api/thumbnails/${jobId}`, {
+      return this.request(`/api/thumbnails/jobs/${jobId}`, {
         method: 'DELETE',
-        headers,
-      });
+      headers,
+    });
     },
 
     retry: async (jobId: string, token?: string): Promise<ApiResponse> => {
@@ -180,7 +176,7 @@ class ApiClient {
       if (token) {
         headers.Authorization = `Bearer ${token}`;
       }
-      return this.request(`/api/thumbnails/${jobId}/retry`, {
+      return this.request(`/api/thumbnails/jobs/${jobId}/retry`, {
         method: 'POST',
         headers,
       });
@@ -190,18 +186,19 @@ class ApiClient {
   private uploadWithProgress(
     endpoint: string,
     formData: FormData,
+    token?: string,
     onProgress?: (progress: number) => void
   ): Promise<ApiResponse<UploadResponse>> {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       const url = this.buildUrl(endpoint);
 
-      xhr.upload.addEventListener('progress', (event) => {
+        xhr.upload.addEventListener('progress', (event) => {
         if (event.lengthComputable && onProgress) {
-          const progress = Math.round((event.loaded / event.total) * 100);
-          onProgress(progress);
-        }
-      });
+            const progress = Math.round((event.loaded / event.total) * 100);
+            onProgress(progress);
+          }
+        });
 
       xhr.addEventListener('load', () => {
         if (xhr.status >= 200 && xhr.status < 300) {
@@ -226,6 +223,12 @@ class ApiClient {
 
       xhr.open('POST', url);
       xhr.timeout = API_CONFIG.UPLOAD_TIMEOUT;
+      
+      // Add Authorization header if token is provided
+      if (token) {
+        xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      }
+      
       xhr.send(formData);
     });
   }

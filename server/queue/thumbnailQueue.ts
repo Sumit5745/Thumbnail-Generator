@@ -26,17 +26,23 @@ export const thumbnailQueueEvents = new QueueEvents('thumbnail-processing', {
 // Add job to queue with per-user FIFO ordering
 export async function addThumbnailJob(jobData: ThumbnailJobData): Promise<void> {
   try {
+    // Get current queue length to ensure FIFO ordering
+    const waitingJobs = await thumbnailQueue.getJobs(['waiting'], 0, -1);
+    const activeJobs = await thumbnailQueue.getJobs(['active'], 0, -1);
+    const totalJobs = waitingJobs.length + activeJobs.length;
+    
     await thumbnailQueue.add(
       'process-thumbnail',
       jobData,
       {
         jobId: jobData.jobId,
-        delay: await getUserQueueDelay(jobData.userId),
-        priority: 1,
+        priority: totalJobs, // Lower number = higher priority for FIFO
+        removeOnComplete: { count: 50 },
+        removeOnFail: { count: 100 },
       }
     );
 
-    console.log(`📋 Added thumbnail job ${jobData.jobId} for user ${jobData.userId}`);
+    console.log(`📋 Added thumbnail job ${jobData.jobId} for user ${jobData.userId} (queue position: ${totalJobs + 1})`);
   } catch (error) {
     console.error('Error adding job to queue:', error);
     throw error;
@@ -106,6 +112,26 @@ export async function removeJob(jobId: string): Promise<boolean> {
   }
 }
 
+// Clean up old jobs
+export async function cleanupOldJobs(): Promise<void> {
+  try {
+    const completedJobs = await thumbnailQueue.getJobs(['completed'], 0, -1);
+    const failedJobs = await thumbnailQueue.getJobs(['failed'], 0, -1);
+    
+    // Remove jobs older than 24 hours
+    const cutoffTime = Date.now() - (24 * 60 * 60 * 1000);
+    
+    for (const job of [...completedJobs, ...failedJobs]) {
+      if (job.timestamp < cutoffTime) {
+        await job.remove();
+        console.log(`🧹 Cleaned up old job ${job.id}`);
+      }
+    }
+  } catch (error) {
+    console.error('Error cleaning up old jobs:', error);
+  }
+}
+
 // Pause queue
 export async function pauseQueue(): Promise<void> {
   await thumbnailQueue.pause();
@@ -135,28 +161,134 @@ export async function cleanQueue(): Promise<void> {
 
 // Setup queue event listeners for real-time updates
 export function setupQueueEventListeners() {
-  thumbnailQueueEvents.on('completed', ({ jobId, returnvalue }) => {
-    console.log(`✅ Job ${jobId} completed`);
-    // Emit socket event for real-time updates
-    redisPubSub.publish('job-completed', JSON.stringify({ jobId, returnvalue }));
+  thumbnailQueueEvents.on('completed', async ({ jobId, returnvalue }) => {
+    try {
+      console.log(`✅ Job ${jobId} completed`);
+      
+      // Get job data from database for complete info
+      const { Job } = require('../models');
+      const completedJob = await Job.findById(jobId).populate('thumbnails').lean();
+      
+      if (completedJob && completedJob.status === 'completed') {
+        console.log(`✅ Job ${jobId} confirmed completed in database`);
+        
+        // Emit socket event for real-time updates
+        redisPubSub.publish('job-completed', JSON.stringify({
+          jobId,
+          returnvalue: {
+            thumbnails: completedJob.thumbnails?.map((thumb: any) => thumb.url) || []
+          },
+          status: 'completed',
+          progress: 100
+        }));
+        
+        console.log(`✅ Redis event published for completed job ${jobId}`);
+      } else {
+        console.log(`⚠️ Job ${jobId} not found or not completed in database, forcing completion`);
+        
+        // Force completion if job exists but status is wrong
+        if (completedJob) {
+          await Job.findByIdAndUpdate(jobId, {
+            status: 'completed',
+            progress: 100,
+            completedAt: new Date()
+          });
+          
+          // Emit completion event
+          redisPubSub.publish('job-completed', JSON.stringify({
+            jobId,
+            returnvalue: {
+              thumbnails: completedJob.thumbnails?.map((thumb: any) => thumb.url) || []
+            },
+            status: 'completed',
+            progress: 100
+          }));
+        } else {
+          // Fallback to basic completion event
+          redisPubSub.publish('job-completed', JSON.stringify({ 
+            jobId, 
+            returnvalue,
+            status: 'completed',
+            progress: 100
+          }));
+        }
+        
+      }
+    } catch (error) {
+      console.error('Error in completed event handler:', error);
+      // Fallback to basic completion event
+      redisPubSub.publish('job-completed', JSON.stringify({ 
+        jobId, 
+        returnvalue,
+        status: 'completed',
+        progress: 100
+      }));
+    }
   });
 
-  thumbnailQueueEvents.on('failed', ({ jobId, failedReason }) => {
-    console.log(`❌ Job ${jobId} failed: ${failedReason}`);
-    // Emit socket event for real-time updates
-    redisPubSub.publish('job-failed', JSON.stringify({ jobId, error: failedReason }));
+  thumbnailQueueEvents.on('failed', async ({ jobId, failedReason }) => {
+    try {
+      console.log(`❌ Job ${jobId} failed: ${failedReason}`);
+      
+      // Update job status in database
+      const { Job } = require('../models');
+      await Job.findByIdAndUpdate(jobId, {
+        status: 'failed',
+        error: failedReason,
+        completedAt: new Date()
+      });
+      
+      // Emit socket event for real-time updates
+      redisPubSub.publish('job-failed', JSON.stringify({ 
+        jobId, 
+        error: failedReason,
+        status: 'failed',
+        progress: 0
+      }));
+    } catch (error) {
+      console.error('Error in failed event handler:', error);
+      redisPubSub.publish('job-failed', JSON.stringify({ 
+        jobId, 
+        error: failedReason,
+        status: 'failed',
+        progress: 0
+      }));
+    }
   });
 
   thumbnailQueueEvents.on('active', ({ jobId }) => {
     console.log(`🔄 Job ${jobId} started processing`);
     // Emit socket event for real-time updates
-    redisPubSub.publish('job-active', JSON.stringify({ jobId }));
+    redisPubSub.publish('job-active', JSON.stringify({ 
+      jobId,
+      status: 'processing',
+      progress: 0
+    }));
   });
 
   thumbnailQueueEvents.on('progress', ({ jobId, data }) => {
     console.log(`📊 Job ${jobId} progress: ${data}%`);
     // Emit socket event for real-time updates
-    redisPubSub.publish('job-progress', JSON.stringify({ jobId, progress: data }));
+    redisPubSub.publish('job-progress', JSON.stringify({ 
+      jobId, 
+      progress: data,
+      status: 'processing'
+    }));
+  });
+
+  thumbnailQueueEvents.on('stalled', async ({ jobId }) => {
+    try {
+      console.warn(`⚠️ Job ${jobId} stalled, attempting recovery`);
+      
+      // Get stalled job and retry
+      const stalledJob = await thumbnailQueue.getJob(jobId);
+      if (stalledJob) {
+        await stalledJob.retry();
+        console.log(`🔄 Retried stalled job ${jobId}`);
+      }
+    } catch (error) {
+      console.error('Error handling stalled job:', error);
+    }
   });
 
   console.log('🎧 Queue event listeners setup complete');

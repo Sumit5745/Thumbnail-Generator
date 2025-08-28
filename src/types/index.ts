@@ -42,7 +42,13 @@ export interface AuthResponse {
 export interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;
-  error?: string;
+  error?: string | {
+    message: string;
+    code?: string;
+    statusCode: number;
+    context?: Record<string, any>;
+    timestamp: string;
+  };
   message?: string;
 }
 
@@ -242,6 +248,7 @@ export interface UploadResponse {
     jobId: string;
     fileId: string;
     filename: string;
+    fileSize: number;
     status: JobStatus;
   }[];
 }

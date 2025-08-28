@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { Upload, File, Image, Video, X, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { api } from '@/lib/api';
+import { Loader } from '@/components/ui/loader';
 
 interface FileWithPreview extends File {
   preview?: string;
@@ -18,6 +19,7 @@ interface FileWithPreview extends File {
 interface FileUploadProps {
   onUploadComplete: (jobs: any[]) => void;
   className?: string;
+  token?: string;
 }
 
 const ACCEPTED_FILE_TYPES = {
@@ -28,7 +30,7 @@ const ACCEPTED_FILE_TYPES = {
 
 const MAX_FILES = 10;
 
-export function FileUpload({ onUploadComplete, className }: FileUploadProps) {
+export function FileUpload({ onUploadComplete, className, token }: FileUploadProps) {
   const [files, setFiles] = useState<FileWithPreview[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -48,8 +50,23 @@ export function FileUpload({ onUploadComplete, className }: FileUploadProps) {
       });
     });
 
+    // Check for duplicate files
+    const existingFileNames = files.map(f => f.name.toLowerCase());
+    const duplicates = acceptedFiles.filter(file =>
+      existingFileNames.includes(file.name.toLowerCase())
+    );
+
+    if (duplicates.length > 0) {
+      toast.warning(`Duplicate files detected: ${duplicates.map(f => f.name).join(', ')}. These files will be skipped.`);
+    }
+
+    // Filter out duplicates
+    const uniqueFiles = acceptedFiles.filter(file =>
+      !existingFileNames.includes(file.name.toLowerCase())
+    );
+
     // Process accepted files
-    const newFiles = acceptedFiles.map((file) => {
+    const newFiles = uniqueFiles.map((file) => {
       const fileWithPreview = Object.assign(file, {
         id: Math.random().toString(36).substr(2, 9),
         preview: file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined
@@ -65,7 +82,7 @@ export function FileUpload({ onUploadComplete, className }: FileUploadProps) {
       }
       return combined;
     });
-  }, []);
+  }, [files]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -109,7 +126,7 @@ export function FileUpload({ onUploadComplete, className }: FileUploadProps) {
       console.log(`📤 Starting upload of ${files.length} files (${totalSizeMB}MB total)`);
 
       // Use real progress tracking with XMLHttpRequest
-      const result = await api.upload.multiple(formData, (progress) => {
+      const result = await api.upload.multiple(formData, token, (progress) => {
         setUploadProgress(progress);
         console.log(`📊 Upload progress: ${progress}%`);
       });
@@ -119,15 +136,15 @@ export function FileUpload({ onUploadComplete, className }: FileUploadProps) {
         toast.success(`${result.data.jobs.length} files uploaded successfully! (${totalSizeMB}MB)`);
         onUploadComplete(result.data.jobs);
 
-        // Clear files and revoke object URLs
-        files.forEach((file) => {
+        files.forEach(file => {
           if (file.preview) {
             URL.revokeObjectURL(file.preview);
           }
         });
         setFiles([]);
       } else {
-        toast.error(result.error || 'Upload failed');
+        const errorMessage = typeof result.error === 'string' ? result.error : 'Upload failed';
+        toast.error(errorMessage);
       }
     } catch (error) {
       console.error('Upload error:', error);
@@ -168,27 +185,27 @@ export function FileUpload({ onUploadComplete, className }: FileUploadProps) {
   return (
     <div className={cn('space-y-4', className)}>
       {/* Dropzone */}
-      <Card>
+      <Card className="bg-white/10 backdrop-blur-md border border-white/20">
         <CardContent className="p-6">
           <div
             {...getRootProps()}
             className={cn(
               'border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors',
               isDragActive
-                ? 'border-blue-500 bg-blue-50'
-                : 'border-gray-300 hover:border-gray-400'
+                ? 'border-blue-400 bg-blue-500/10'
+                : 'border-white/30 hover:border-white/50 hover:bg-white/5'
             )}
           >
             <input {...getInputProps()} />
-            <Upload className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+            <Upload className="mx-auto h-12 w-12 text-white/60 mb-4" />
             {isDragActive ? (
-              <p className="text-lg font-medium text-blue-600">Drop the files here...</p>
+              <p className="text-lg font-medium text-blue-300">Drop the files here...</p>
             ) : (
               <div>
-                <p className="text-lg font-medium text-gray-900 mb-2">
+                <p className="text-lg font-medium text-white mb-2">
                   Drag & drop files here, or click to select
                 </p>
-                <p className="text-sm text-gray-500">
+                <p className="text-sm text-slate-300">
                   Support for images and videos up to 100MB each (max {MAX_FILES} files)
                 </p>
               </div>
@@ -199,19 +216,19 @@ export function FileUpload({ onUploadComplete, className }: FileUploadProps) {
 
       {/* File List */}
       {files.length > 0 && (
-        <Card>
+        <Card className="bg-white/10 backdrop-blur-md border border-white/20">
           <CardContent className="p-4">
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <h3 className="font-medium">Selected Files ({files.length})</h3>
+                <h3 className="font-medium text-white">Selected Files ({files.length})</h3>
                 <Button
                   onClick={uploadFiles}
                   disabled={isUploading}
-                  className="ml-auto"
+                  className="ml-auto bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white"
                 >
                   {isUploading ? (
                     <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      <Loader variant="dots" size="sm" className="mr-2" />
                       Uploading...
                     </>
                   ) : (
@@ -227,16 +244,16 @@ export function FileUpload({ onUploadComplete, className }: FileUploadProps) {
                 <div className="space-y-3">
                   <div className="space-y-2">
                     <div className="flex justify-between items-center">
-                      <span className="text-sm font-medium text-gray-700">
+                      <span className="text-sm font-medium text-slate-300">
                         Uploading {files.length} file{files.length > 1 ? 's' : ''}...
                       </span>
-                      <span className="text-sm text-gray-500">
+                      <span className="text-sm text-slate-400">
                         {uploadProgress}%
                       </span>
                     </div>
                     <Progress value={uploadProgress} className="w-full h-3" />
                   </div>
-                  <div className="flex justify-between text-xs text-gray-500">
+                  <div className="flex justify-between text-xs text-slate-400">
                     <span>
                       {(files.reduce((sum, file) => sum + file.size, 0) / (1024 * 1024)).toFixed(2)}MB total
                     </span>
@@ -251,7 +268,7 @@ export function FileUpload({ onUploadComplete, className }: FileUploadProps) {
                 {files.map((file) => (
                   <div
                     key={file.id}
-                    className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg"
+                    className="flex items-center space-x-3 p-3 bg-white/5 rounded-lg border border-white/10 hover:bg-white/10 transition-colors"
                   >
                     {file.preview ? (
                       <img
@@ -263,10 +280,10 @@ export function FileUpload({ onUploadComplete, className }: FileUploadProps) {
                       getFileIcon(file)
                     )}
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">
+                      <p className="text-sm font-medium text-white truncate">
                         {file.name}
                       </p>
-                      <div className="flex items-center space-x-2 text-xs text-gray-500">
+                      <div className="flex items-center space-x-2 text-xs text-slate-300">
                         <span>{formatFileSize(file.size)}</span>
                         <span>•</span>
                         <span className="capitalize">
@@ -279,6 +296,7 @@ export function FileUpload({ onUploadComplete, className }: FileUploadProps) {
                       size="sm"
                       onClick={() => removeFile(file.id)}
                       disabled={isUploading}
+                      className="text-slate-400 hover:text-red-400 hover:bg-red-500/10"
                     >
                       <X className="h-4 w-4" />
                     </Button>
